@@ -7,12 +7,21 @@ from config import BOT_TOKEN
 from utils.logger import logger
 from handlers.tasks import router as tasks_router
 from utils.google_tasks import GoogleTasksManager
+from models.base import Base
+from models.database import async_engine
+
+async def create_tables():
+    async with async_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
 
 async def main():
     logger.info("Starting bot")
     logger.debug(f"Bot token: {BOT_TOKEN[:5]}...")
     
     try:
+        # Створюємо таблиці при запуску
+        await create_tables()
+        
         # Ініціалізація бота та диспетчера
         bot = Bot(token=BOT_TOKEN)
         storage = MemoryStorage()

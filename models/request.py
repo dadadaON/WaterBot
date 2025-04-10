@@ -8,6 +8,7 @@ class ServiceRequest(Base):
     id = Column(Integer, primary_key=True)
     full_name = Column(String, nullable=False)
     phone = Column(String, nullable=False)
-    address = Column(String, nullable=False)
+    address = Column(String, nullable=True)
     service_type = Column(String, nullable=False)
+    question = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow) 
