@@ -1,12 +1,21 @@
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import sessionmaker
 
-# Змінюємо URL для асинхронної роботи
-DATABASE_URL = "sqlite+aiosqlite:///bot.db"
+DATABASE_URL = "sqlite+aiosqlite:///database.db"
 
-engine = create_async_engine(DATABASE_URL, echo=True)
-async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+# Створюємо асинхронний двигун
+async_engine = create_async_engine(
+    DATABASE_URL,
+    echo=True  # Для відображення SQL запитів в консолі
+)
 
-async def get_session() -> AsyncSession:
-    async with async_session() as session:
-        yield session 
+# Створюємо фабрику сесій
+async_session = async_sessionmaker(
+    async_engine,
+    class_=AsyncSession,
+    expire_on_commit=False
+)
+
+# Функція для отримання сесії
+def get_session():
+    return async_session() 
