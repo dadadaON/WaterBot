@@ -12,4 +12,5 @@ class ServiceRequest(Base):
     address = Column(String, nullable=True)
     service_type = Column(String, nullable=False)
     question = Column(String, nullable=True)
+    question = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow) 

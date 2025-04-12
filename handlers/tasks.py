@@ -1,5 +1,6 @@
 from aiogram import Router, F
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
+from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -42,6 +43,20 @@ CONTACT_EMAIL = ""
 CONTACT_ADDRESS = ""
 CONTACT_NUMBER = "+390738390983"
 
+# Оновлюємо константи для кнопок
+SERVICES = {
+    'install': '🔧 Встановлення обладнання',
+    'maintenance': '🔄 Техобслуговування',
+    'repair': '🛠 Ремонт обладнання',
+    'question': '❓ Задати питання'
+}
+
+# Контактна інформація
+CONTACT_PHONE = "@Complete_System"
+CONTACT_EMAIL = ""
+CONTACT_ADDRESS = ""
+CONTACT_NUMBER = "+390738390983"
+
 class TaskStates(StatesGroup):
     waiting_for_service_type = State()
     waiting_for_full_name = State()
@@ -52,6 +67,35 @@ class TaskStates(StatesGroup):
     waiting_for_apartment = State()
     waiting_for_question = State()
     waiting_for_confirmation = State()
+
+def get_services_keyboard() -> InlineKeyboardMarkup:
+    """Створює клавіатуру з кнопками послуг"""
+    builder = InlineKeyboardBuilder()
+    for service_id, service_name in SERVICES.items():
+        builder.button(text=service_name, callback_data=f"service:{service_id}")
+    builder.button(text="❌ Скасувати заявку", callback_data="cancel")
+    builder.adjust(1)  # По одній кнопці в рядку
+    return builder.as_markup()
+
+def get_confirm_keyboard() -> InlineKeyboardMarkup:
+    """Створює клавіатуру для підтвердження"""
+    builder = InlineKeyboardBuilder()
+    builder.button(text="✅ Підтвердити", callback_data="confirm:yes")
+    builder.button(text="❌ Скасувати", callback_data="confirm:no")
+    builder.adjust(2)
+    return builder.as_markup()
+
+# Створюємо клавіатуру для головного меню
+def get_main_keyboard() -> ReplyKeyboardMarkup:
+    """Створює головну клавіатуру"""
+    keyboard = [
+        [KeyboardButton(text="📝 Створити заявку")],
+        [KeyboardButton(text="ℹ️ Інформація"), KeyboardButton(text="📞 Контакти")]
+    ]
+    return ReplyKeyboardMarkup(
+        keyboard=keyboard,
+        resize_keyboard=True
+    )
 
 def get_services_keyboard() -> InlineKeyboardMarkup:
     """Створює клавіатуру з кнопками послуг"""
@@ -108,12 +152,47 @@ async def handle_info(message: Message):
 
 @router.message(F.text == "📞 Контакти")
 async def handle_contacts(message: Message):
+    # Спочатку показуємо головне меню
     await message.answer(
+        "👋 Вітаю!\n"
+        "Я допоможу вам оформити заявку на обслуговування.",
+        reply_markup=get_main_keyboard()
+    )
+
+@router.message(F.text == "📝 Створити заявку")
+async def handle_create_request(message: Message):
+    await message.answer(
+        "📝 Оберіть, будь ласка, тип послуги:",
+        reply_markup=get_services_keyboard()
+    )
+
+@router.message(F.text == "ℹ️ Інформація")
+async def handle_info(message: Message):
+    await message.answer(
+        "ℹ️ Про нас:\n\n"
+        "Ми надаємо послуги з встановлення та обслуговування обладнання.\n"
+        "Працюємо щодня з 9:00 до 18:00."
+    )
+
+@router.message(F.text == "📞 Контакти")
+async def handle_contacts(message: Message):
+    await message.answer(
+        "📞 Наші контакти:\n\n"
+        f"👤 {CONTACT_PHONE}\n"
+        f"📱 {CONTACT_NUMBER}"
         "📞 Наші контакти:\n\n"
         f"👤 {CONTACT_PHONE}\n"
         f"📱 {CONTACT_NUMBER}"
     )
 
+@router.callback_query(lambda c: c.data == "cancel")
+async def process_cancel(callback: CallbackQuery, state: FSMContext):
+    await state.clear()
+    await callback.message.edit_text(
+        "❌ Запис скасовано.\n"
+        "Щоб почати спочатку, натисніть /start"
+    )
+    await callback.answer()
 @router.callback_query(lambda c: c.data == "cancel")
 async def process_cancel(callback: CallbackQuery, state: FSMContext):
     await state.clear()
@@ -152,9 +231,46 @@ async def process_service_selection(callback: CallbackQuery, state: FSMContext):
             reply_markup=get_services_keyboard()
         )
         await callback.answer()
+@router.callback_query(lambda c: c.data.startswith('service:'))
+async def process_service_selection(callback: CallbackQuery, state: FSMContext):
+    try:
+        service_id = callback.data.split(':')[1]
+        logger.info(f"Selected service: {service_id}")
+        
+        await state.update_data(service_type=service_id)
+        logger.debug(f"State updated with service_type: {service_id}")
+        
+        # Різні повідомлення для різних типів послуг
+        if service_id == 'question':
+            await callback.message.edit_text(
+                "Будь ласка, введіть ваше ім'я:"
+            )
+        else:
+            await callback.message.edit_text(
+                f"Ви обрали: {SERVICES[service_id]}\n"
+                "Будь ласка, введіть ваше ім'я:"
+            )
+        await state.set_state(TaskStates.waiting_for_full_name)
+        await callback.answer()
+        
+    except Exception as e:
+        logger.error(f"Error processing service selection: {str(e)}")
+        await callback.message.edit_text(
+            "❌ Помилка при виборі послуги. Спробуйте ще раз:",
+            reply_markup=get_services_keyboard()
+        )
+        await callback.answer()
 
 @router.message(TaskStates.waiting_for_full_name)
 async def process_full_name(message: Message, state: FSMContext):
+    # Валідація імені (приклад простої перевірки)
+    if not all(x.isalpha() or x.isspace() for x in message.text):
+        await message.answer(
+            "❌ Ім'я має містити лише літери та пробіли.\n"
+            "Будь ласка, спробуйте ще раз:"
+        )
+        return
+    
     # Валідація імені (приклад простої перевірки)
     if not all(x.isalpha() or x.isspace() for x in message.text):
         await message.answer(
@@ -215,13 +331,32 @@ async def process_street(message: Message, state: FSMContext):
         await message.answer(
             "❌ Назва вулиці занадто коротка.\n"
             "Будь ласка, введіть коректну назву вулиці:"
+            "❌ Назва вулиці занадто коротка.\n"
+            "Будь ласка, введіть коректну назву вулиці:"
         )
         return
     
     await state.update_data(street=street)
     await state.set_state(TaskStates.waiting_for_building)
     await message.answer("Введіть, будь ласка, номер будинку:")
+        return
+    
+    await state.update_data(street=street)
+    await state.set_state(TaskStates.waiting_for_building)
+    await message.answer("Введіть, будь ласка, номер будинку:")
 
+@router.message(TaskStates.waiting_for_building)
+async def process_building(message: Message, state: FSMContext):
+    building = message.text.strip()
+    if not building:
+        await message.answer(
+            "❌ Будь ласка, введіть номер будинку:"
+        )
+        return
+    
+    await state.update_data(building=building)
+    await state.set_state(TaskStates.waiting_for_apartment)
+    await message.answer("Введіть, будь ласка, номер квартири:")
 @router.message(TaskStates.waiting_for_building)
 async def process_building(message: Message, state: FSMContext):
     building = message.text.strip()
@@ -243,6 +378,14 @@ async def process_apartment(message: Message, state: FSMContext):
             "❌ Будь ласка, введіть номер квартири:"
         )
         return
+@router.message(TaskStates.waiting_for_apartment)
+async def process_apartment(message: Message, state: FSMContext):
+    apartment = message.text.strip()
+    if not apartment:
+        await message.answer(
+            "❌ Будь ласка, введіть номер квартири:"
+        )
+        return
     
     data = await state.get_data()
     
@@ -250,6 +393,11 @@ async def process_apartment(message: Message, state: FSMContext):
     address = f"вул. {data['street']}, буд. {data['building']}, кв. {apartment}"
     await state.update_data(address=address)
     
+    # Формуємо повну адресу з квартирою
+    address = f"вул. {data['street']}, буд. {data['building']}, кв. {apartment}"
+    await state.update_data(address=address)
+    
+    # Формуємо повідомлення для підтвердження
     # Формуємо повідомлення для підтвердження
     confirmation_text = (
         "📋 Перевірте, будь ласка, введені дані:\n\n"
@@ -301,6 +449,14 @@ async def cmd_test(message: Message):
     except Exception as e:
         logger.error(f"Test command error: {str(e)}")
         await message.answer("Помилка при тестуванні з'єднання")
+
+@router.message(Command("cancel"))
+async def cmd_cancel(message: Message, state: FSMContext):
+    await state.clear()
+    await message.answer(
+        "🔄 Дію скасовано. Оберіть послугу:",
+        reply_markup=get_services_keyboard()
+    )
 
 @router.message(Command("cancel"))
 async def cmd_cancel(message: Message, state: FSMContext):

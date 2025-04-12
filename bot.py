@@ -71,6 +71,9 @@ async def main():
         # Створюємо таблиці при запуску
         await create_tables()
         
+        # Створюємо таблиці при запуску
+        await create_tables()
+        
         # Ініціалізація бота та диспетчера
         logger.debug(f"Creating bot with token: {BOT_TOKEN}")
         bot = Bot(token=BOT_TOKEN)
